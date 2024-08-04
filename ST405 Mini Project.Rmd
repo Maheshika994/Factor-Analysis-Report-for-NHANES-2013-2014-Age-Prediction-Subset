@@ -1,0 +1,228 @@
+---
+title: "ST405 Mini Project"
+author: "S/18/841"
+date: "2024-04-05"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+
+
+
+**Introduction**
+
+The National Health and Nutrition Examination Survey (NHANES) conducted by the Centers for Disease Control and Prevention (CDC) gathers extensive health and nutritional information from a diverse U.S. population. In this study, we narrow our focus to predicting respondents' age by extracting a subset of features from the NHANES dataset. These features include physiological measurements, lifestyle choices, and biochemical markers, hypothesized to correlate strongly with age.
+
+**Methodology**
+
+**Dataset Description:**
+The dataset used in this study is derived from NHANES 2013-2014, comprising various health and nutritional data from the U.S. population. Key variables include "SEQN" (Respondent Sequence Number), "age_group" (Respondent's Age Group), "RIDAGEYR" (Respondent's Age), "RIAGENDR" (Respondent's Gender), "PAQ605" (Engagement in Physical Activities), "BMXBMI" (Body Mass Index), "LBXGLU" (Blood Glucose after Fasting), "DIQ010" (Diabetes Status), "LBXGLT" (Oral Glucose Tolerance Test), and "LBXIN" (Blood Insulin Levels).
+
+**Statistical Methods Employed:**
+This analysis employs Exploratory Factor Analysis (EFA) and Confirmatory Factor Analysis (CFA). EFA uncovers underlying patterns and correlations among variables, while CFA validates the factor structure and assesses model fit. Descriptive statistics such as means, standard deviations, and correlations are computed to summarize the dataset and examine relationships between variables.
+
+```{r}
+#Libraries
+library(tidyverse)
+library(ggplot2)
+library(psych)
+library(corrplot)
+library(ggcorrplot)
+library(GPArotation)
+library(nFactors)
+library(factoextra)
+library(psych)
+library(lavaan)
+```
+
+
+```{r}
+###Data Loading and Inspection
+nhanes_data <- read.csv("../Data/NHANES_age_prediction.csv")
+```
+
+
+```{r}
+# View the structure of the dataset
+str(nhanes_data)
+```
+
+
+```{r}
+# View summary statistics of the dataset
+summary(nhanes_data)
+```
+
+
+```{r}
+# View the first few rows of the dataset
+head(nhanes_data)
+```
+
+```{r}
+#Dimensions of the dataset
+dim(nhanes_data)
+```
+
+
+```{r}
+# Check for missing values
+colSums(is.na(nhanes_data))
+
+```
+
+```{r}
+###Data Preprocessing
+# Select only numeric variables from the NHANES dataset
+numerical_nhanes_data <- nhanes_data[, sapply(nhanes_data, is.numeric)]
+
+# Scale the numeric variables
+normalized_data <- scale(numerical_nhanes_data)
+
+# View the first few rows of the normalized data
+head(normalized_data)
+
+```
+```{r}
+#Compute the correlation matrix
+cor_matrix<-cor(normalized_data)
+```
+
+```{r}
+#Visualize the correlation matrix
+ggcorrplot(cor_matrix)
+```
+
+```{r}
+
+```
+
+```{r}
+# Compute eigenvalues
+eigen_values<- eigen(cor_matrix)
+eigen_values
+```
+```{r}
+# Principal Component Analysis (PCA)
+PCA <- princomp(cor_matrix)
+PCA
+```
+```{r}
+summary(PCA)
+```
+```{r}
+# Visualize the eigenvalues
+fviz_eig(PCA,addlabels=TRUE)
+```
+```{r}
+# Perform parallel analysis for factor extraction
+fa.parallel(normalized_data, fm = "pa", fa = "fa")
+```
+```{r}
+# Compute covariance matrix
+covariance_matrix <- cov(normalized_data)
+covariance_matrix
+```
+```{r}
+# Kaiser-Meyer-Olkin (KMO) Test
+KMO(r=nhanes_data[,-c(2)])
+
+cor_matrix <- cor_matrix[,KMO(cor_matrix)$MSAi>0.5]
+round(KMO(cor_matrix)$MSA,2)
+```
+```{r}
+# Perform Bartlett's test of sphericity
+cortest.bartlett(normalized_data)
+```
+```{r}
+# Compute the determinant of the covariance matrix
+det(covariance_matrix)
+```
+```{r}
+# Compute proportion of variance explained by each principal component
+Pop_var_exp <- eigen_values$values/sum(eigen_values$values)*100
+round(Pop_var_exp,3)
+```
+```{r}
+# Total variance explained by all principal components
+sum(eigen_values$values)
+```
+```{r}
+# Sum of proportion of variance explained
+sum(Pop_var_exp)
+```
+```{r}
+# Factor Loadings using PCA
+PCA$loadings[,1:4]
+```
+
+```{r}
+# Visualize the variables in PCA
+fviz_pca_var(PCA, col.var = "black")
+```
+
+```{r}
+# Visualize the squared cosines of variables in PCA
+fviz_cos2(PCA, choice = "var", axes = 1:4)
+```
+```{r}
+# Factor Analysis using factanal
+numerical_nhanes_data.fa<-factanal(numerical_nhanes_data,factors = 4)
+numerical_nhanes_data.fa
+```
+```{r}
+# Compute squared loadings
+apply(numerical_nhanes_data.fa$loadings^2,1,sum)
+```
+```{r}
+# Factor Analysis using fa function
+nhanes_data_PC<- fa(covariance_matrix ,nfactors = 4,rotate = "varimax",n.obs
+= 1000 ,covar = TRUE,fm = "pa")
+nhanes_data_PC
+```
+
+```{r}
+# Rotate the factors
+nhanes_data_PC_rotate <- fa(cor_matrix ,nfactors = 3,rotate =
+"varimax",n.obs = 1000 ,cor = TRUE,fm = 'pa',max.iter = 1000)
+nhanes_data_PC_rotate
+```
+
+```{r}
+# Plot the factor diagram
+fa.diagram(nhanes_data_PC_rotate)
+```
+
+```{r}
+###Confirmatory Factor Analysis (CFA):
+# Define the CFA model
+variables <-
+normalized_data[,c("RIDAGEYR","BMXBMI","LBXGLU","LBXGLT","SEQN")]
+#define the CFA model
+model <- '
+Factor1 =~ SEQN
+Factor2 =~ LBXGLT+LBXGLU+RIDAGEYR
+Factor3=~BMXBMI
+'
+# Fit the CFA model
+fit <- cfa(model, data = variables)
+# Assess model fit
+summary(fit, fit.measures = TRUE)
+# Standardized estimates (factor loadings)
+parameterEstimates(fit, standardized = TRUE, ci = TRUE)
+```
+```{r}
+#remotes::install_github("rstudio/htmltools")
+
+#install.packages("html",dependencies = TRUE)
+
+```
+
